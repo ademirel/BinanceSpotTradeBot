@@ -9,4 +9,5 @@ dependencies = [
     "pandas-ta>=0.4.71b0",
     "python-binance>=1.0.30",
     "python-dotenv>=1.1.1",
+    "pyyaml>=6.0.3",
 ]
