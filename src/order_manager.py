@@ -6,6 +6,54 @@ class OrderManager:
         self.config = config
         self.logger = logger
     
+    def _get_trades_for_order_with_retry(self, symbol, order_id, order_time=None, max_retries=3):
+        """
+        Robust trade fetching with retry logic and time filtering.
+        Returns list of trades for the given order_id.
+        """
+        for attempt in range(max_retries):
+            try:
+                if order_time:
+                    start_time = int(order_time - 5000)
+                    trades = self.client.client.get_my_trades(symbol=symbol, startTime=start_time, limit=100)
+                else:
+                    trades = self.client.get_my_trades(symbol, limit=100)
+                
+                order_trades = [t for t in trades if t.get('orderId') == order_id]
+                
+                if order_trades:
+                    return order_trades
+                
+                if attempt < max_retries - 1:
+                    if self.logger:
+                        self.logger.debug(f"No trades found for order {order_id}, retrying... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(1 * (attempt + 1))
+                
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"Error fetching trades for {symbol} order {order_id}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1 * (attempt + 1))
+        
+        return []
+    
+    def _calculate_avg_price_from_trades(self, trades, fallback_price):
+        """
+        Calculate average execution price from trades.
+        Returns (avg_price, total_quantity).
+        """
+        if not trades:
+            return fallback_price, 0
+        
+        total_cost = sum(float(t['price']) * float(t['qty']) for t in trades)
+        total_qty = sum(float(t['qty']) for t in trades)
+        
+        if total_qty > 0:
+            avg_price = total_cost / total_qty
+            return avg_price, total_qty
+        
+        return fallback_price, 0
+    
     def get_lot_size_filter(self, symbol):
         symbol_info = self.client.get_symbol_info(symbol)
         if not symbol_info:
@@ -88,6 +136,7 @@ class OrderManager:
                 return None
             
             order_id = order.get('orderId')
+            order_time = order.get('transactTime')
             if not order_id:
                 return None
             
@@ -115,14 +164,8 @@ class OrderManager:
                         avg_price = float(order_status.get('price', 0))
                     
                     if avg_price == 0:
-                        recent_trades = self.client.get_my_trades(symbol, limit=50)
-                        order_trades = [t for t in recent_trades if t.get('orderId') == order_id]
-                        if order_trades:
-                            total_cost = sum(float(t['price']) * float(t['qty']) for t in order_trades)
-                            total_qty = sum(float(t['qty']) for t in order_trades)
-                            avg_price = total_cost / total_qty if total_qty > 0 else limit_price
-                        else:
-                            avg_price = limit_price
+                        order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
+                        avg_price, trade_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
                     
                     if self.logger:
                         self.logger.info(f"Order FILLED for {symbol}: {executed_qty} @ {avg_price}")
@@ -137,6 +180,29 @@ class OrderManager:
                 elif status in ['CANCELED', 'REJECTED', 'EXPIRED']:
                     executed_qty = float(order_status.get('executedQty', 0))
                     
+                    if executed_qty == 0:
+                        if self.logger:
+                            self.logger.debug(f"Order {status} with executedQty=0, checking trades to confirm...")
+                        
+                        time.sleep(0.5)
+                        retry_status = self.client.get_order_status(symbol, order_id)
+                        if retry_status:
+                            executed_qty = float(retry_status.get('executedQty', 0))
+                        
+                        if executed_qty == 0:
+                            order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
+                            if order_trades:
+                                avg_price, executed_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
+                                if executed_qty > 0:
+                                    if self.logger:
+                                        self.logger.warning(f"Order {status} but found execution via trades for {symbol}: {executed_qty} @ {avg_price}")
+                                    return {
+                                        'symbol': symbol,
+                                        'price': avg_price,
+                                        'quantity': executed_qty,
+                                        'order_id': order_id
+                                    }
+                    
                     if executed_qty > 0:
                         fills = order_status.get('fills', [])
                         if fills:
@@ -145,14 +211,8 @@ class OrderManager:
                             avg_price = float(order_status.get('price', 0))
                         
                         if avg_price == 0:
-                            recent_trades = self.client.get_my_trades(symbol, limit=50)
-                            order_trades = [t for t in recent_trades if t.get('orderId') == order_id]
-                            if order_trades:
-                                total_cost = sum(float(t['price']) * float(t['qty']) for t in order_trades)
-                                total_qty = sum(float(t['qty']) for t in order_trades)
-                                avg_price = total_cost / total_qty if total_qty > 0 else limit_price
-                            else:
-                                avg_price = limit_price
+                            order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
+                            avg_price, _ = self._calculate_avg_price_from_trades(order_trades, limit_price)
                         
                         if self.logger:
                             self.logger.warning(f"Order {status} but partially filled for {symbol}: {executed_qty} @ {avg_price}")
@@ -173,21 +233,19 @@ class OrderManager:
             
             cancel_result = self.client.cancel_order(symbol, order_id)
             
-            time.sleep(1)
+            time.sleep(1.5)
             final_status = self.client.get_order_status(symbol, order_id)
             
             if not final_status:
                 if self.logger:
-                    self.logger.warning(f"Could not get final order status for {symbol}, checking trades...")
-                recent_trades = self.client.get_my_trades(symbol, limit=50)
-                order_trades = [t for t in recent_trades if t.get('orderId') == order_id]
+                    self.logger.warning(f"Could not get final order status for {symbol}, checking trades with retry...")
+                
+                order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
                 if order_trades:
-                    total_cost = sum(float(t['price']) * float(t['qty']) for t in order_trades)
-                    total_qty = sum(float(t['qty']) for t in order_trades)
+                    avg_price, total_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
                     if total_qty > 0:
-                        avg_price = total_cost / total_qty
                         if self.logger:
-                            self.logger.warning(f"Found partial fill via trades for {symbol}: {total_qty} @ {avg_price}")
+                            self.logger.warning(f"Found execution via trades for {symbol}: {total_qty} @ {avg_price}")
                         return {
                             'symbol': symbol,
                             'price': avg_price,
@@ -198,6 +256,24 @@ class OrderManager:
             
             executed_qty = float(final_status.get('executedQty', 0))
             
+            if executed_qty == 0:
+                if self.logger:
+                    self.logger.debug(f"Final status shows executedQty=0, double-checking with trades...")
+                
+                order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
+                if order_trades:
+                    avg_price, executed_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
+                    if executed_qty > 0:
+                        if self.logger:
+                            self.logger.warning(f"Found execution via trades despite executedQty=0 for {symbol}: {executed_qty} @ {avg_price}")
+                        return {
+                            'symbol': symbol,
+                            'price': avg_price,
+                            'quantity': executed_qty,
+                            'order_id': order_id
+                        }
+                return None
+            
             if executed_qty > 0:
                 fills = final_status.get('fills', [])
                 if fills:
@@ -206,14 +282,8 @@ class OrderManager:
                     avg_price = float(final_status.get('price', 0))
                 
                 if avg_price == 0:
-                    recent_trades = self.client.get_my_trades(symbol, limit=50)
-                    order_trades = [t for t in recent_trades if t.get('orderId') == order_id]
-                    if order_trades:
-                        total_cost = sum(float(t['price']) * float(t['qty']) for t in order_trades)
-                        total_qty = sum(float(t['qty']) for t in order_trades)
-                        avg_price = total_cost / total_qty if total_qty > 0 else limit_price
-                    else:
-                        avg_price = limit_price
+                    order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
+                    avg_price, _ = self._calculate_avg_price_from_trades(order_trades, limit_price)
                 
                 if self.logger:
                     self.logger.warning(f"Order partially filled for {symbol}: {executed_qty} @ {avg_price}")
