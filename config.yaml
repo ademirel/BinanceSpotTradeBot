@@ -25,6 +25,20 @@ indicators:
   moving_averages:
     short_period: 20
     long_period: 50
+  
+  ema:
+    fast_period: 12
+    slow_period: 26
+  
+  bollinger:
+    period: 20
+    std_dev: 2
+  
+  atr:
+    period: 14
+  
+  adx:
+    period: 14
 
 # Trading Settings
 check_interval_seconds: 60
@@ -35,6 +49,9 @@ signal_thresholds:
   rsi_buy_threshold: 35
   rsi_sell_threshold: 65
   macd_signal_strength: 0.0001
+  volume_spike: 1.5
+  adx_strong_trend: 25
+  bb_squeeze: 0.02
 
 # Binance API (set in .env file)
 testnet: false
