@@ -24,25 +24,31 @@ class ConfigLoader:
         return value
     
     @property
-    def top_coins_count(self):
-        return self.get('top_coins_count', 20)
+    def top_coins_count(self) -> int:
+        value = self.get('top_coins_count', 20)
+        return int(value) if value is not None else 20
     
     @property
-    def position_size_usd(self):
-        return self.get('position_size_usd', 100.0)
+    def position_size_usd(self) -> float:
+        value = self.get('position_size_usd', 100.0)
+        return float(value) if value is not None else 100.0
     
     @property
-    def stop_loss_percent(self):
-        return self.get('stop_loss_percent', 2.0)
+    def stop_loss_percent(self) -> float:
+        value = self.get('stop_loss_percent', 2.0)
+        return float(value) if value is not None else 2.0
     
     @property
-    def trailing_stop_percent(self):
-        return self.get('trailing_stop_percent', 1.5)
+    def trailing_stop_percent(self) -> float:
+        value = self.get('trailing_stop_percent', 1.5)
+        return float(value) if value is not None else 1.5
     
     @property
-    def check_interval(self):
-        return self.get('check_interval_seconds', 60)
+    def check_interval(self) -> int:
+        value = self.get('check_interval_seconds', 60)
+        return int(value) if value is not None else 60
     
     @property
-    def max_open_positions(self):
-        return self.get('max_open_positions', 20)
+    def max_open_positions(self) -> int:
+        value = self.get('max_open_positions', 20)
+        return int(value) if value is not None else 20

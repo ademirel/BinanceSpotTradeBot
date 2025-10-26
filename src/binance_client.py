@@ -13,10 +13,13 @@ class BinanceClientWrapper:
         try:
             tickers = self.client.get_ticker()
             
+            stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'USDP', 'DAI', 'FDUSD']
+            
             usdt_pairs = [
                 ticker for ticker in tickers 
                 if ticker['symbol'].endswith(quote_asset) and 
-                not any(x in ticker['symbol'] for x in ['UP', 'DOWN', 'BEAR', 'BULL'])
+                not any(x in ticker['symbol'] for x in ['UP', 'DOWN', 'BEAR', 'BULL']) and
+                not any(ticker['symbol'].startswith(stable) for stable in stablecoins)
             ]
             
             for ticker in usdt_pairs:
