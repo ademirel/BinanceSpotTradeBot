@@ -102,7 +102,7 @@ class OrderManager:
         
         if quantity < min_qty:
             if self.logger:
-                self.logger.warning(f"Calculated quantity {quantity} is less than min {min_qty} for {symbol}")
+                self.logger.warning(f"Skip {symbol}: Calculated quantity {quantity} < minimum {min_qty} (Need ${(min_qty * price):.2f} minimum, have ${amount_usd})")
             return None
         
         if max_qty and quantity > max_qty:

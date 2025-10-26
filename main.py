@@ -71,6 +71,8 @@ def main():
                     logger.error("Failed to get top coins, retrying in next iteration")
                     time.sleep(config.check_interval)
                     continue
+                else:
+                    logger.info(f"Top {len(top_coins)} coins by volume: {', '.join(top_coins)}")
             
             open_positions = position_mgr.get_open_positions()
             logger.info(f"Open positions: {len(open_positions)}/{config.max_open_positions}")
@@ -79,6 +81,7 @@ def main():
                 try:
                     current_price = binance.get_symbol_price(symbol)
                     if not current_price:
+                        logger.warning(f"Skip {symbol}: Could not get current price")
                         continue
                     
                     if position_mgr.has_position(symbol):
@@ -97,14 +100,17 @@ def main():
                     
                     else:
                         if position_mgr.get_position_count() >= config.max_open_positions:
+                            logger.debug(f"Skip {symbol}: Max positions ({config.max_open_positions}) reached")
                             continue
                         
                         klines = binance.get_klines(symbol, interval='1h', limit=100)
                         if not klines:
+                            logger.warning(f"Skip {symbol}: Could not get klines data")
                             continue
                         
                         indicators = indicators_calc.calculate_indicators(klines)
                         if not indicators:
+                            logger.warning(f"Skip {symbol}: Could not calculate indicators")
                             continue
                         
                         signal = signal_gen.generate_signal(indicators)
@@ -122,6 +128,10 @@ def main():
                                     quantity=order_result['quantity'],
                                     order_id=order_result.get('order_id')
                                 )
+                            else:
+                                logger.warning(f"Failed to place order for {symbol} - check minimum order size requirements")
+                        else:
+                            logger.debug(f"Skip {symbol}: No BUY signal (RSI: {indicators.get('rsi', 0):.2f}, MACD: {indicators.get('macd', 0):.6f}, Signal: {signal})")
                 
                 except Exception as e:
                     logger.error(f"Error processing {symbol}: {e}")
