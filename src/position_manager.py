@@ -15,9 +15,11 @@ class PositionManager:
             try:
                 with open(self.positions_file, 'r') as f:
                     self.positions = json.load(f)
-                self.logger.info(f"Loaded {len(self.positions)} existing positions")
+                if self.logger:
+                    self.logger.info(f"Loaded {len(self.positions)} existing positions")
             except Exception as e:
-                self.logger.error(f"Error loading positions: {e}")
+                if self.logger:
+                    self.logger.error(f"Error loading positions: {e}")
                 self.positions = {}
         else:
             self.positions = {}
@@ -27,7 +29,8 @@ class PositionManager:
             with open(self.positions_file, 'w') as f:
                 json.dump(self.positions, f, indent=2)
         except Exception as e:
-            self.logger.error(f"Error saving positions: {e}")
+            if self.logger:
+                self.logger.error(f"Error saving positions: {e}")
     
     def add_position(self, symbol, entry_price, quantity, order_id=None):
         self.positions[symbol] = {
@@ -41,7 +44,8 @@ class PositionManager:
             'trailing_stop': None
         }
         self.save_positions()
-        self.logger.info(f"Position added: {symbol} @ {entry_price}, qty: {quantity}")
+        if self.logger:
+            self.logger.info(f"Position added: {symbol} @ {entry_price}, qty: {quantity}")
     
     def update_position(self, symbol, current_price):
         if symbol not in self.positions:
@@ -57,7 +61,8 @@ class PositionManager:
             if profit_percent > 0:
                 trailing_stop_price = current_price * (1 - self.config.trailing_stop_percent / 100)
                 position['trailing_stop'] = trailing_stop_price
-                self.logger.info(f"Trailing stop updated for {symbol}: {trailing_stop_price:.8f} (Current: {current_price:.8f})")
+                if self.logger:
+                    self.logger.info(f"Trailing stop updated for {symbol}: {trailing_stop_price:.8f} (Current: {current_price:.8f})")
         
         self.save_positions()
     
@@ -69,12 +74,14 @@ class PositionManager:
         
         if current_price <= position['stop_loss']:
             loss_percent = ((current_price - position['entry_price']) / position['entry_price']) * 100
-            self.logger.warning(f"Stop loss triggered for {symbol}: {loss_percent:.2f}%")
+            if self.logger:
+                self.logger.warning(f"Stop loss triggered for {symbol}: {loss_percent:.2f}%")
             return True, 'STOP_LOSS'
         
         if position['trailing_stop'] and current_price <= position['trailing_stop']:
             profit_percent = ((current_price - position['entry_price']) / position['entry_price']) * 100
-            self.logger.info(f"Trailing stop triggered for {symbol}: {profit_percent:.2f}%")
+            if self.logger:
+                self.logger.info(f"Trailing stop triggered for {symbol}: {profit_percent:.2f}%")
             return True, 'TRAILING_STOP'
         
         return False, None
@@ -87,11 +94,12 @@ class PositionManager:
                 profit_percent = ((close_price - position['entry_price']) / position['entry_price']) * 100
                 profit_usd = (close_price - position['entry_price']) * position['quantity']
                 
-                self.logger.info(
-                    f"Position closed: {symbol} | Entry: {position['entry_price']:.8f} | "
-                    f"Exit: {close_price:.8f} | P/L: {profit_percent:.2f}% (${profit_usd:.2f}) | "
-                    f"Reason: {reason or 'Manual'}"
-                )
+                if self.logger:
+                    self.logger.info(
+                        f"Position closed: {symbol} | Entry: {position['entry_price']:.8f} | "
+                        f"Exit: {close_price:.8f} | P/L: {profit_percent:.2f}% (${profit_usd:.2f}) | "
+                        f"Reason: {reason or 'Manual'}"
+                    )
                 
                 self.log_trade(symbol, position, close_price, profit_percent, profit_usd, reason)
             
@@ -118,7 +126,8 @@ class PositionManager:
             with open(trade_log_file, 'a') as f:
                 f.write(json.dumps(trade_data) + '\n')
         except Exception as e:
-            self.logger.error(f"Error logging trade: {e}")
+            if self.logger:
+                self.logger.error(f"Error logging trade: {e}")
     
     def get_open_positions(self):
         return self.positions

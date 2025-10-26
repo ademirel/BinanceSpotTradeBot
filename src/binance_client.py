@@ -6,7 +6,8 @@ class BinanceClientWrapper:
     def __init__(self, api_key, api_secret, testnet=False, logger=None):
         self.logger = logger
         self.client = Client(api_key, api_secret, testnet=testnet)
-        self.logger.info(f"Binance client initialized (Testnet: {testnet})")
+        if self.logger:
+            self.logger.info(f"Binance client initialized (Testnet: {testnet})")
     
     def get_top_volume_pairs(self, top_n=20, quote_asset='USDT'):
         try:
@@ -25,12 +26,14 @@ class BinanceClientWrapper:
             
             top_pairs = [pair['symbol'] for pair in sorted_pairs[:top_n]]
             
-            self.logger.info(f"Top {top_n} pairs by volume: {', '.join(top_pairs)}")
+            if self.logger:
+                self.logger.info(f"Top {top_n} pairs by volume: {', '.join(top_pairs)}")
             
             return top_pairs
             
         except BinanceAPIException as e:
-            self.logger.error(f"Error fetching top volume pairs: {e}")
+            if self.logger:
+                self.logger.error(f"Error fetching top volume pairs: {e}")
             return []
     
     def get_symbol_price(self, symbol):
@@ -38,7 +41,8 @@ class BinanceClientWrapper:
             ticker = self.client.get_symbol_ticker(symbol=symbol)
             return float(ticker['price'])
         except Exception as e:
-            self.logger.error(f"Error getting price for {symbol}: {e}")
+            if self.logger:
+                self.logger.error(f"Error getting price for {symbol}: {e}")
             return None
     
     def get_klines(self, symbol, interval='1h', limit=100):
@@ -50,7 +54,8 @@ class BinanceClientWrapper:
             )
             return klines
         except Exception as e:
-            self.logger.error(f"Error getting klines for {symbol}: {e}")
+            if self.logger:
+                self.logger.error(f"Error getting klines for {symbol}: {e}")
             return []
     
     def get_account_balance(self, asset='USDT'):
@@ -58,7 +63,8 @@ class BinanceClientWrapper:
             balance = self.client.get_asset_balance(asset=asset)
             return float(balance['free']) if balance else 0.0
         except Exception as e:
-            self.logger.error(f"Error getting balance for {asset}: {e}")
+            if self.logger:
+                self.logger.error(f"Error getting balance for {asset}: {e}")
             return 0.0
     
     def create_limit_buy_order(self, symbol, quantity, price):
@@ -68,10 +74,32 @@ class BinanceClientWrapper:
                 quantity=quantity,
                 price=price
             )
-            self.logger.info(f"Limit buy order created for {symbol}: {quantity} @ {price}")
+            if self.logger:
+                self.logger.info(f"Limit buy order created for {symbol}: {quantity} @ {price}")
             return order
         except BinanceAPIException as e:
-            self.logger.error(f"Error creating buy order for {symbol}: {e}")
+            if self.logger:
+                self.logger.error(f"Error creating buy order for {symbol}: {e}")
+            return None
+    
+    def get_order_status(self, symbol, order_id):
+        try:
+            order = self.client.get_order(symbol=symbol, orderId=order_id)
+            return order
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error getting order status for {symbol}: {e}")
+            return None
+    
+    def cancel_order(self, symbol, order_id):
+        try:
+            result = self.client.cancel_order(symbol=symbol, orderId=order_id)
+            if self.logger:
+                self.logger.info(f"Order {order_id} cancelled for {symbol}")
+            return result
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error cancelling order {order_id} for {symbol}: {e}")
             return None
     
     def create_limit_sell_order(self, symbol, quantity, price):
@@ -81,10 +109,12 @@ class BinanceClientWrapper:
                 quantity=quantity,
                 price=price
             )
-            self.logger.info(f"Limit sell order created for {symbol}: {quantity} @ {price}")
+            if self.logger:
+                self.logger.info(f"Limit sell order created for {symbol}: {quantity} @ {price}")
             return order
         except BinanceAPIException as e:
-            self.logger.error(f"Error creating sell order for {symbol}: {e}")
+            if self.logger:
+                self.logger.error(f"Error creating sell order for {symbol}: {e}")
             return None
     
     def create_market_sell_order(self, symbol, quantity):
@@ -93,10 +123,12 @@ class BinanceClientWrapper:
                 symbol=symbol,
                 quantity=quantity
             )
-            self.logger.info(f"Market sell order created for {symbol}: {quantity}")
+            if self.logger:
+                self.logger.info(f"Market sell order created for {symbol}: {quantity}")
             return order
         except BinanceAPIException as e:
-            self.logger.error(f"Error creating market sell order for {symbol}: {e}")
+            if self.logger:
+                self.logger.error(f"Error creating market sell order for {symbol}: {e}")
             return None
     
     def get_symbol_info(self, symbol):
@@ -104,5 +136,24 @@ class BinanceClientWrapper:
             info = self.client.get_symbol_info(symbol)
             return info
         except Exception as e:
-            self.logger.error(f"Error getting symbol info for {symbol}: {e}")
+            if self.logger:
+                self.logger.error(f"Error getting symbol info for {symbol}: {e}")
             return None
+    
+    def get_asset_balance_quantity(self, asset):
+        try:
+            balance = self.client.get_asset_balance(asset=asset)
+            return float(balance['free']) if balance else 0.0
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error getting balance quantity for {asset}: {e}")
+            return 0.0
+    
+    def get_my_trades(self, symbol, limit=10):
+        try:
+            trades = self.client.get_my_trades(symbol=symbol, limit=limit)
+            return trades
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error getting trades for {symbol}: {e}")
+            return []
