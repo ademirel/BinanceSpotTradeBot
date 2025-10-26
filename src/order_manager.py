@@ -182,26 +182,8 @@ class OrderManager:
                     
                     if executed_qty == 0:
                         if self.logger:
-                            self.logger.debug(f"Order {status} with executedQty=0, checking trades to confirm...")
-                        
-                        time.sleep(0.5)
-                        retry_status = self.client.get_order_status(symbol, order_id)
-                        if retry_status:
-                            executed_qty = float(retry_status.get('executedQty', 0))
-                        
-                        if executed_qty == 0:
-                            order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
-                            if order_trades:
-                                avg_price, executed_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
-                                if executed_qty > 0:
-                                    if self.logger:
-                                        self.logger.warning(f"Order {status} but found execution via trades for {symbol}: {executed_qty} @ {avg_price}")
-                                    return {
-                                        'symbol': symbol,
-                                        'price': avg_price,
-                                        'quantity': executed_qty,
-                                        'order_id': order_id
-                                    }
+                            self.logger.warning(f"Order {status} with executedQty=0 for {symbol}. Not adding to positions.")
+                        return None
                     
                     if executed_qty > 0:
                         fills = order_status.get('fills', [])
@@ -238,40 +220,14 @@ class OrderManager:
             
             if not final_status:
                 if self.logger:
-                    self.logger.warning(f"Could not get final order status for {symbol}, checking trades with retry...")
-                
-                order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
-                if order_trades:
-                    avg_price, total_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
-                    if total_qty > 0:
-                        if self.logger:
-                            self.logger.warning(f"Found execution via trades for {symbol}: {total_qty} @ {avg_price}")
-                        return {
-                            'symbol': symbol,
-                            'price': avg_price,
-                            'quantity': total_qty,
-                            'order_id': order_id
-                        }
+                    self.logger.error(f"Could not get final order status for {symbol} after cancel. Not adding to positions.")
                 return None
             
             executed_qty = float(final_status.get('executedQty', 0))
             
             if executed_qty == 0:
                 if self.logger:
-                    self.logger.debug(f"Final status shows executedQty=0, double-checking with trades...")
-                
-                order_trades = self._get_trades_for_order_with_retry(symbol, order_id, order_time)
-                if order_trades:
-                    avg_price, executed_qty = self._calculate_avg_price_from_trades(order_trades, limit_price)
-                    if executed_qty > 0:
-                        if self.logger:
-                            self.logger.warning(f"Found execution via trades despite executedQty=0 for {symbol}: {executed_qty} @ {avg_price}")
-                        return {
-                            'symbol': symbol,
-                            'price': avg_price,
-                            'quantity': executed_qty,
-                            'order_id': order_id
-                        }
+                    self.logger.warning(f"Order timeout and cancelled with executedQty=0 for {symbol}. Not adding to positions.")
                 return None
             
             if executed_qty > 0:

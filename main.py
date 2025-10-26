@@ -128,12 +128,17 @@ def main():
                             order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd)
                             
                             if order_result:
-                                position_mgr.add_position(
-                                    symbol=order_result['symbol'],
-                                    entry_price=order_result['price'],
-                                    quantity=order_result['quantity'],
-                                    order_id=order_result.get('order_id')
-                                )
+                                executed_qty = order_result.get('quantity', 0)
+                                if executed_qty > 0:
+                                    logger.info(f"✓ Adding position: {symbol} - Qty: {executed_qty}, Price: {order_result['price']}")
+                                    position_mgr.add_position(
+                                        symbol=order_result['symbol'],
+                                        entry_price=order_result['price'],
+                                        quantity=executed_qty,
+                                        order_id=order_result.get('order_id')
+                                    )
+                                else:
+                                    logger.error(f"✗ PREVENTED phantom position: {symbol} returned executedQty=0")
                             else:
                                 logger.warning(f"Failed to place order for {symbol} - check minimum order size requirements")
                         else:
