@@ -105,6 +105,34 @@ class BinanceClientWrapper:
                 self.logger.error(f"Error cancelling order {order_id} for {symbol}: {e}")
             return None
     
+    def get_open_orders(self, symbol):
+        try:
+            orders = self.client.get_open_orders(symbol=symbol)
+            return orders
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error getting open orders for {symbol}: {e}")
+            return []
+    
+    def cancel_all_open_orders(self, symbol):
+        try:
+            open_orders = self.get_open_orders(symbol)
+            if not open_orders:
+                return True
+            
+            if self.logger:
+                self.logger.info(f"Cancelling {len(open_orders)} open orders for {symbol}")
+            
+            for order in open_orders:
+                self.cancel_order(symbol, order['orderId'])
+            
+            time.sleep(0.5)
+            return True
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error cancelling all orders for {symbol}: {e}")
+            return False
+    
     def create_limit_sell_order(self, symbol, quantity, price):
         try:
             order = self.client.order_limit_sell(
@@ -151,6 +179,22 @@ class BinanceClientWrapper:
             if self.logger:
                 self.logger.error(f"Error getting balance quantity for {asset}: {e}")
             return 0.0
+    
+    def get_asset_total_balance(self, asset):
+        try:
+            balance = self.client.get_asset_balance(asset=asset)
+            if balance:
+                free = float(balance.get('free', 0))
+                locked = float(balance.get('locked', 0))
+                total = free + locked
+                if self.logger:
+                    self.logger.debug(f"{asset} balance - Free: {free}, Locked: {locked}, Total: {total}")
+                return free, locked, total
+            return 0.0, 0.0, 0.0
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error getting total balance for {asset}: {e}")
+            return 0.0, 0.0, 0.0
     
     def get_my_trades(self, symbol, limit=10):
         try:

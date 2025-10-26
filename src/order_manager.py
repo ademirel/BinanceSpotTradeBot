@@ -305,24 +305,63 @@ class OrderManager:
     def close_position(self, symbol, quantity):
         try:
             if self.logger:
-                self.logger.info(f"Closing position for {symbol}: {quantity}")
+                self.logger.info(f"Attempting to close position for {symbol}: {quantity}")
             
             base_asset = symbol.replace('USDT', '')
-            actual_balance = self.client.get_asset_balance_quantity(base_asset)
+            free_balance, locked_balance, total_balance = self.client.get_asset_total_balance(base_asset)
             
-            if actual_balance < quantity * 0.99:
-                if self.logger:
-                    self.logger.warning(f"Actual balance {actual_balance} < expected {quantity} for {symbol}, using actual balance")
-                quantity = actual_balance
-            
-            if quantity == 0:
-                if self.logger:
-                    self.logger.error(f"Cannot close position for {symbol}: zero balance")
-                return None
+            if self.logger:
+                self.logger.info(f"{base_asset} - Free: {free_balance}, Locked: {locked_balance}, Total: {total_balance}, Expected: {quantity}")
             
             min_qty, max_qty, step_size = self.get_lot_size_filter(symbol)
+            
+            if min_qty and total_balance < min_qty:
+                if self.logger:
+                    self.logger.error(f"PHANTOM POSITION: {symbol} total balance {total_balance} < minimum order size {min_qty}")
+                return 'PHANTOM_POSITION'
+            
+            if locked_balance > 0:
+                if self.logger:
+                    self.logger.warning(f"Locked balance detected for {symbol}: {locked_balance}. Cancelling open orders...")
+                self.client.cancel_all_open_orders(symbol)
+                
+                import time
+                time.sleep(2)
+                
+                free_balance, locked_balance, total_balance = self.client.get_asset_total_balance(base_asset)
+                if self.logger:
+                    self.logger.info(f"After cancellation - Free: {free_balance}, Locked: {locked_balance}, Total: {total_balance}")
+                
+                if locked_balance > 0:
+                    if self.logger:
+                        self.logger.warning(f"Balance still locked after cancellation ({locked_balance}). Will retry later.")
+                    return None
+            
+            if free_balance < quantity * 0.99:
+                if self.logger:
+                    self.logger.warning(f"Free balance {free_balance} < expected {quantity}, using available balance for {symbol}")
+                quantity = free_balance
+            
             if min_qty:
                 quantity = self.round_step_size(quantity, step_size)
+                
+                if quantity < min_qty:
+                    if total_balance >= min_qty:
+                        if self.logger:
+                            self.logger.warning(f"Free balance {quantity} < min {min_qty} but total balance {total_balance} is sufficient. Will retry later.")
+                        return None
+                    else:
+                        if self.logger:
+                            self.logger.error(f"BELOW_MIN_QTY: Total balance {total_balance} < minimum {min_qty} for {symbol}")
+                        return 'BELOW_MIN_QTY'
+            
+            if quantity <= 0:
+                if self.logger:
+                    self.logger.error(f"Cannot close position for {symbol}: zero or negative quantity after adjustments")
+                return 'ZERO_QUANTITY'
+            
+            if self.logger:
+                self.logger.info(f"Creating market sell order for {symbol}: {quantity}")
             
             order = self.client.create_market_sell_order(symbol, str(quantity))
             
@@ -330,6 +369,8 @@ class OrderManager:
                 fills = order.get('fills', [])
                 if fills:
                     avg_price = sum(float(fill['price']) * float(fill['qty']) for fill in fills) / sum(float(fill['qty']) for fill in fills)
+                    if self.logger:
+                        self.logger.info(f"Position closed successfully for {symbol} @ {avg_price}")
                     return avg_price
                 
                 return self.client.get_symbol_price(symbol)
@@ -337,6 +378,56 @@ class OrderManager:
             return None
             
         except Exception as e:
+            error_msg = str(e)
             if self.logger:
-                self.logger.error(f"Error closing position for {symbol}: {e}")
+                self.logger.error(f"Error closing position for {symbol}: {error_msg}")
+            
+            if 'insufficient balance' in error_msg.lower() or '-2010' in error_msg:
+                if self.logger:
+                    self.logger.warning(f"INSUFFICIENT BALANCE error - Attempting to cancel open orders and retry...")
+                
+                self.client.cancel_all_open_orders(symbol)
+                
+                import time
+                time.sleep(2)
+                
+                base_asset = symbol.replace('USDT', '')
+                free_balance, locked_balance, total_balance = self.client.get_asset_total_balance(base_asset)
+                
+                if self.logger:
+                    self.logger.info(f"After cancel retry - Free: {free_balance}, Locked: {locked_balance}, Total: {total_balance}")
+                
+                min_qty, _, step_size = self.get_lot_size_filter(symbol)
+                
+                if min_qty and total_balance < min_qty:
+                    if self.logger:
+                        self.logger.error(f"PHANTOM POSITION: Total balance {total_balance} < min {min_qty} after cancel.")
+                    return 'PHANTOM_POSITION'
+                
+                if locked_balance > 0:
+                    if self.logger:
+                        self.logger.warning(f"Balance still locked ({locked_balance}) after cancel. Will retry later.")
+                    return None
+                
+                if free_balance > 0 and min_qty:
+                    retry_qty = self.round_step_size(free_balance, step_size)
+                    if retry_qty >= min_qty:
+                        if self.logger:
+                            self.logger.info(f"Retrying market sell with {retry_qty} for {symbol}")
+                        retry_order = self.client.create_market_sell_order(symbol, str(retry_qty))
+                        if retry_order:
+                            fills = retry_order.get('fills', [])
+                            if fills:
+                                avg_price = sum(float(fill['price']) * float(fill['qty']) for fill in fills) / sum(float(fill['qty']) for fill in fills)
+                                return avg_price
+                            return self.client.get_symbol_price(symbol)
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"Free balance {retry_qty} still < min {min_qty} but total {total_balance} >= min. Will retry.")
+                        return None
+                
+                if self.logger:
+                    self.logger.error(f"Could not resolve insufficient balance for {symbol}")
+                return None
+            
             return None

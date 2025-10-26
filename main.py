@@ -91,12 +91,18 @@ def main():
                         
                         if should_close:
                             position = position_mgr.get_open_positions()[symbol]
-                            close_price = order_mgr.close_position(symbol, position['quantity'])
+                            close_result = order_mgr.close_position(symbol, position['quantity'])
                             
-                            if close_price:
-                                position_mgr.remove_position(symbol, close_price, reason)
+                            if isinstance(close_result, str):
+                                if close_result in ['PHANTOM_POSITION', 'BELOW_MIN_QTY', 'ZERO_QUANTITY']:
+                                    logger.error(f"Position closure failed for {symbol}: {close_result} - Removing phantom position")
+                                    position_mgr.remove_position(symbol, current_price, f"{reason}_PHANTOM")
+                                else:
+                                    logger.error(f"Unknown error closing {symbol}: {close_result}")
+                            elif close_result:
+                                position_mgr.remove_position(symbol, close_result, reason)
                             else:
-                                logger.error(f"Failed to close position for {symbol}")
+                                logger.error(f"Failed to close position for {symbol} - will retry next iteration")
                     
                     else:
                         if position_mgr.get_position_count() >= config.max_open_positions:
