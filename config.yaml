@@ -1,0 +1,40 @@
+# Binance Trading Bot Configuration
+
+# Top coin selection
+top_coins_count: 20
+
+# Position sizing
+position_size_usd: 100.0
+
+# Risk Management
+stop_loss_percent: 2.0
+trailing_stop_percent: 1.5
+
+# Technical Indicators
+indicators:
+  rsi:
+    period: 14
+    oversold: 30
+    overbought: 70
+  
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  
+  moving_averages:
+    short_period: 20
+    long_period: 50
+
+# Trading Settings
+check_interval_seconds: 60
+max_open_positions: 20
+
+# Signal Generation
+signal_thresholds:
+  rsi_buy_threshold: 35
+  rsi_sell_threshold: 65
+  macd_signal_strength: 0.0001
+
+# Binance API (set in .env file)
+testnet: false
