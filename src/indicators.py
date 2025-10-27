@@ -134,3 +134,96 @@ class TechnicalIndicators:
         df['close'] = df['close'].astype(float)
         
         return df['close'].tail(n).tolist()
+    
+    def check_fibonacci_pivot_support(self, klines_1h, current_price, lookback_candles=5, tolerance_pct=0.5):
+        """
+        Fibonacci pivot support kontrolü:
+        - Fiyat son N mum içinde pivot support seviyelerini (S1 veya S2) test etmiş mi?
+        - Ama current fiyat hala support'un üzerinde mi? (kırmamış)
+        
+        Returns:
+            dict: {
+                'tested_support': bool,  # Support test edildi mi?
+                'holding_support': bool,  # Support tutuyor mu?
+                'pivot': float,
+                's1': float,
+                's2': float,
+                'tested_level': str  # 'S1' veya 'S2' veya None
+            }
+        """
+        if not klines_1h or len(klines_1h) < 2:
+            return {
+                'tested_support': False,
+                'holding_support': False,
+                'pivot': 0,
+                's1': 0,
+                's2': 0,
+                'tested_level': None
+            }
+        
+        df = pd.DataFrame(klines_1h, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+            'taker_buy_quote', 'ignore'
+        ])
+        
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
+        df['close'] = df['close'].astype(float)
+        
+        last_candle = df.iloc[-2]
+        
+        pivot = (last_candle['high'] + last_candle['low'] + last_candle['close']) / 3
+        s1 = 2 * pivot - last_candle['high']
+        s2 = pivot - (last_candle['high'] - last_candle['low'])
+        r1 = 2 * pivot - last_candle['low']
+        r2 = pivot + (last_candle['high'] - last_candle['low'])
+        
+        recent_candles = df.tail(lookback_candles)
+        
+        tested_s1 = False
+        tested_s2 = False
+        broken_s1 = False
+        broken_s2 = False
+        tested_level = None
+        
+        tolerance = tolerance_pct / 100.0
+        
+        for idx, candle in recent_candles.iterrows():
+            candle_low = candle['low']
+            candle_close = candle['close']
+            
+            if abs(candle_low - s1) / s1 <= tolerance and candle_low >= s1 * (1 - tolerance):
+                tested_s1 = True
+                tested_level = 'S1'
+            
+            if candle_close < s1 * (1 - tolerance) or candle_low < s1 * (1 - tolerance):
+                broken_s1 = True
+            
+            if abs(candle_low - s2) / s2 <= tolerance and candle_low >= s2 * (1 - tolerance):
+                tested_s2 = True
+                if tested_level is None:
+                    tested_level = 'S2'
+            
+            if candle_close < s2 * (1 - tolerance) or candle_low < s2 * (1 - tolerance):
+                broken_s2 = True
+        
+        tested_support = tested_s1 or tested_s2
+        
+        holding_support = False
+        if tested_support:
+            if tested_s1 and not broken_s1 and current_price > s1:
+                holding_support = True
+            elif tested_s2 and not broken_s2 and current_price > s2:
+                holding_support = True
+        
+        return {
+            'tested_support': tested_support,
+            'holding_support': holding_support,
+            'pivot': pivot,
+            's1': s1,
+            's2': s2,
+            'r1': r1,
+            'r2': r2,
+            'tested_level': tested_level
+        }

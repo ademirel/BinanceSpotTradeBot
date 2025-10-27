@@ -128,6 +128,31 @@ def main():
                             ichimoku_pos = "Above Cloud" if current_price > max(indicators.get('ichimoku_senkou_a', 0), indicators.get('ichimoku_senkou_b', 0)) else "Below Cloud"
                             logger.info(f"  Heiken Ashi: {ha_trend}, Ichimoku: {ichimoku_pos}, Stoch RSI: {indicators.get('stoch_rsi_k', 0):.2f}")
                             
+                            fibonacci_enabled = config.get('fibonacci_pivot.enabled', True)
+                            if fibonacci_enabled:
+                                klines_1h = binance.get_klines(symbol, interval='1h', limit=10)
+                                if klines_1h:
+                                    lookback = int(config.get('fibonacci_pivot.lookback_candles', 5))
+                                    tolerance = float(config.get('fibonacci_pivot.tolerance_percent', 0.5))
+                                    fib_result = indicators_calc.check_fibonacci_pivot_support(
+                                        klines_1h, 
+                                        current_price,
+                                        lookback_candles=lookback,
+                                        tolerance_pct=tolerance
+                                    )
+                                    
+                                    logger.info(f"  Fibonacci Pivot: P={fib_result['pivot']:.8f}, S1={fib_result['s1']:.8f}, S2={fib_result['s2']:.8f}")
+                                    logger.info(f"  Support Tested: {fib_result['tested_support']}, Holding: {fib_result['holding_support']}, Level: {fib_result['tested_level']}")
+                                    
+                                    if not fib_result['holding_support']:
+                                        logger.info(f"✗ SKIP {symbol}: Fibonacci pivot support not tested/holding - avoiding weak entry")
+                                        continue
+                                    
+                                    logger.info(f"✓ Fibonacci pivot check PASSED - Support holding at {fib_result['tested_level']}")
+                                else:
+                                    logger.warning(f"Could not get 1h klines for {symbol} - skipping fibonacci pivot check")
+                                    continue
+                            
                             order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd)
                             
                             if order_result:

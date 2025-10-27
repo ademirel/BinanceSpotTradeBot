@@ -54,5 +54,11 @@ signal_thresholds:
   adx_strong_trend: 25
   bb_squeeze: 0.02
 
+# Fibonacci Pivot Filter (1h)
+fibonacci_pivot:
+  enabled: true
+  lookback_candles: 5
+  tolerance_percent: 0.5
+
 # Binance API (set in .env file)
 testnet: false
