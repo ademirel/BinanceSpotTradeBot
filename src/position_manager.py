@@ -25,15 +25,49 @@ class PositionManager:
             self.positions = {}
     
     def save_positions(self):
+        import tempfile
+        
         try:
-            with open(self.positions_file, 'w') as f:
-                json.dump(self.positions, f, indent=2)
+            backup_file = self.positions_file + '.bak'
+            if os.path.exists(self.positions_file):
+                try:
+                    with open(self.positions_file, 'r') as f:
+                        with open(backup_file, 'w') as bak:
+                            bak.write(f.read())
+                except Exception:
+                    pass
+            
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.json', dir='.', text=True)
+            
+            try:
+                with os.fdopen(temp_fd, 'w') as temp_file:
+                    json.dump(self.positions, temp_file, indent=2)
+                    temp_file.flush()
+                    os.fsync(temp_file.fileno())
+                
+                with open(temp_path, 'r') as verify_file:
+                    verification = json.load(verify_file)
+                    if verification != self.positions:
+                        raise Exception("Position verification failed - file corrupted")
+                
+                os.replace(temp_path, self.positions_file)
+                
+                if self.logger:
+                    self.logger.debug(f"Positions saved and verified: {len(self.positions)} positions")
+                return True
+                
+            except Exception as e:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise
+            
         except Exception as e:
             if self.logger:
-                self.logger.error(f"Error saving positions: {e}")
+                self.logger.error(f"CRITICAL: Error saving positions: {e}")
+            raise Exception(f"Failed to save positions: {e}")
     
     def add_position(self, symbol, entry_price, quantity, order_id=None):
-        self.positions[symbol] = {
+        position_data = {
             'symbol': symbol,
             'entry_price': entry_price,
             'quantity': quantity,
@@ -43,15 +77,27 @@ class PositionManager:
             'stop_loss': entry_price * (1 - self.config.stop_loss_percent / 100),
             'trailing_stop': None
         }
-        self.save_positions()
-        if self.logger:
-            self.logger.info(f"Position added: {symbol} @ {entry_price}, qty: {quantity}")
+        
+        self.positions[symbol] = position_data
+        
+        try:
+            self.save_positions()
+            if self.logger:
+                self.logger.info(f"✓ Position saved successfully: {symbol} @ {entry_price}, qty: {quantity}")
+        except Exception as e:
+            del self.positions[symbol]
+            if self.logger:
+                self.logger.error(f"✗ FAILED to save position {symbol}: {e}")
+                self.logger.error(f"Position ROLLED BACK from memory to prevent phantom positions!")
+            raise Exception(f"Position add failed for {symbol}: {e}")
     
     def update_position(self, symbol, current_price):
         if symbol not in self.positions:
             return
         
         position = self.positions[symbol]
+        old_highest = position['highest_price']
+        old_trailing = position.get('trailing_stop')
         
         if current_price > position['highest_price']:
             position['highest_price'] = current_price
@@ -64,7 +110,14 @@ class PositionManager:
                 if self.logger:
                     self.logger.info(f"Trailing stop updated for {symbol}: {trailing_stop_price:.8f} (Current: {current_price:.8f})")
         
-        self.save_positions()
+        try:
+            self.save_positions()
+        except Exception as e:
+            position['highest_price'] = old_highest
+            position['trailing_stop'] = old_trailing
+            if self.logger:
+                self.logger.error(f"Failed to save position update for {symbol}: {e}")
+                self.logger.warning(f"Position update ROLLED BACK for {symbol}")
     
     def should_close_position(self, symbol, current_price):
         if symbol not in self.positions:
@@ -89,6 +142,7 @@ class PositionManager:
     def remove_position(self, symbol, close_price=None, reason=None):
         if symbol in self.positions:
             position = self.positions[symbol]
+            position_backup = position.copy()
             
             if close_price:
                 profit_percent = ((close_price - position['entry_price']) / position['entry_price']) * 100
@@ -104,7 +158,15 @@ class PositionManager:
                 self.log_trade(symbol, position, close_price, profit_percent, profit_usd, reason)
             
             del self.positions[symbol]
-            self.save_positions()
+            
+            try:
+                self.save_positions()
+            except Exception as e:
+                self.positions[symbol] = position_backup
+                if self.logger:
+                    self.logger.error(f"Failed to save position removal for {symbol}: {e}")
+                    self.logger.warning(f"Position removal ROLLED BACK for {symbol}")
+                raise Exception(f"Position removal failed for {symbol}: {e}")
     
     def log_trade(self, symbol, position, close_price, profit_percent, profit_usd, reason):
         trade_log_file = 'logs/trade_history.log'

@@ -131,12 +131,19 @@ def main():
                                 executed_qty = order_result.get('quantity', 0)
                                 if executed_qty > 0:
                                     logger.info(f"✓ Adding position: {symbol} - Qty: {executed_qty}, Price: {order_result['price']}")
-                                    position_mgr.add_position(
-                                        symbol=order_result['symbol'],
-                                        entry_price=order_result['price'],
-                                        quantity=executed_qty,
-                                        order_id=order_result.get('order_id')
-                                    )
+                                    try:
+                                        position_mgr.add_position(
+                                            symbol=order_result['symbol'],
+                                            entry_price=order_result['price'],
+                                            quantity=executed_qty,
+                                            order_id=order_result.get('order_id')
+                                        )
+                                        logger.info(f"✓ Position {symbol} successfully saved to positions.json")
+                                    except Exception as save_error:
+                                        logger.error(f"✗ CRITICAL: Position save failed for {symbol}!")
+                                        logger.error(f"✗ Order was executed on Binance but NOT saved to positions.json!")
+                                        logger.error(f"✗ Manual intervention required - Check Binance orders!")
+                                        logger.error(f"✗ Error: {save_error}")
                                 else:
                                     logger.error(f"✗ PREVENTED phantom position: {symbol} returned executedQty=0")
                             else:
