@@ -109,7 +109,8 @@ def main():
                             logger.debug(f"Skip {symbol}: Max positions ({config.max_open_positions}) reached")
                             continue
                         
-                        klines = binance.get_klines(symbol, interval='1h', limit=100)
+                        timeframe = str(config.get('timeframe', '15m'))
+                        klines = binance.get_klines(symbol, interval=timeframe, limit=100)
                         if not klines:
                             logger.warning(f"Skip {symbol}: Could not get klines data")
                             continue

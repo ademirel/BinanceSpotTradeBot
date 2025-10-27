@@ -10,17 +10,21 @@ position_size_usd: 100.0
 stop_loss_percent: 2.0
 trailing_stop_percent: 1.5
 
+# Timeframe for technical analysis
+timeframe: 15m
+
 # Technical Indicators
 indicators:
-  rsi:
+  stoch_rsi:
     period: 14
-    oversold: 30
-    overbought: 70
   
-  macd:
-    fast_period: 12
-    slow_period: 26
-    signal_period: 9
+  heiken_ashi:
+    enabled: true
+  
+  ichimoku:
+    tenkan_period: 9
+    kijun_period: 26
+    senkou_period: 52
   
   moving_averages:
     short_period: 20
@@ -46,9 +50,6 @@ max_open_positions: 20
 
 # Signal Generation
 signal_thresholds:
-  rsi_buy_threshold: 35
-  rsi_sell_threshold: 65
-  macd_signal_strength: 0.0001
   volume_spike: 1.5
   adx_strong_trend: 25
   bb_squeeze: 0.02
