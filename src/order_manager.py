@@ -293,9 +293,14 @@ class OrderManager:
                         self.logger.warning(f"Balance still locked after cancellation ({locked_balance}). Will retry later.")
                     return None
             
-            if free_balance < quantity * 0.99:
+            if free_balance < quantity:
                 if self.logger:
                     self.logger.warning(f"Free balance {free_balance} < expected {quantity}, using available balance for {symbol}")
+                quantity = free_balance
+            
+            if quantity > free_balance:
+                if self.logger:
+                    self.logger.error(f"CRITICAL: Quantity {quantity} > free balance {free_balance} for {symbol}, capping to free balance")
                 quantity = free_balance
             
             if min_qty:
