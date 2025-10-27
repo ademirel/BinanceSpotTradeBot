@@ -48,26 +48,29 @@ class SignalGenerator:
         
         indicators_fired = {'buy': [], 'sell': []}
         
+        ha_bullish = False
+        ha_bearish = False
         if not pd.isna(ha_open) and not pd.isna(ha_close):
-            if ha_close > ha_open:
-                body_size = ha_close - ha_open
-                candle_range = ha_high - ha_low
-                if candle_range > 0 and body_size / candle_range > 0.6:
-                    indicators_fired['buy'].append('heiken_ashi')
-            elif ha_close < ha_open:
-                body_size = ha_open - ha_close
-                candle_range = ha_high - ha_low
-                if candle_range > 0 and body_size / candle_range > 0.6:
-                    indicators_fired['sell'].append('heiken_ashi')
+            ha_bullish = ha_close > ha_open
+            ha_bearish = ha_close < ha_open
         
+        ichimoku_above_cloud = False
+        ichimoku_below_cloud = False
         if not pd.isna(ichimoku_tenkan) and not pd.isna(ichimoku_kijun) and not pd.isna(ichimoku_senkou_a) and not pd.isna(ichimoku_senkou_b):
             cloud_top = max(ichimoku_senkou_a, ichimoku_senkou_b)
             cloud_bottom = min(ichimoku_senkou_a, ichimoku_senkou_b)
             
             if current_price > cloud_top and ichimoku_tenkan > ichimoku_kijun:
-                indicators_fired['buy'].append('ichimoku')
+                ichimoku_above_cloud = True
             elif current_price < cloud_bottom and ichimoku_tenkan < ichimoku_kijun:
-                indicators_fired['sell'].append('ichimoku')
+                ichimoku_below_cloud = True
+        
+        if ha_bullish and ichimoku_above_cloud:
+            indicators_fired['buy'].append('heiken_ashi')
+            indicators_fired['buy'].append('ichimoku')
+        elif ha_bearish and ichimoku_below_cloud:
+            indicators_fired['sell'].append('heiken_ashi')
+            indicators_fired['sell'].append('ichimoku')
         
         if not pd.isna(stoch_rsi_k) and not pd.isna(stoch_rsi_d):
             if stoch_rsi_k < 20 and stoch_rsi_k > stoch_rsi_d:
@@ -103,19 +106,6 @@ class SignalGenerator:
                 elif current_price < bb_middle:
                     indicators_fired['sell'].append('bb_squeeze')
         
-        if not pd.isna(volume_ratio) and volume_ratio > self.volume_spike_threshold:
-            if len(indicators_fired['buy']) > len(indicators_fired['sell']):
-                indicators_fired['buy'].append('volume')
-            elif len(indicators_fired['sell']) > len(indicators_fired['buy']):
-                indicators_fired['sell'].append('volume')
-        
-        if not pd.isna(atr) and atr > 0:
-            price_volatility_pct = (atr / current_price) * 100 if current_price > 0 else 0
-            if price_volatility_pct > 2.0:
-                if len(indicators_fired['buy']) > len(indicators_fired['sell']):
-                    indicators_fired['buy'].append('atr')
-                elif len(indicators_fired['sell']) > len(indicators_fired['buy']):
-                    indicators_fired['sell'].append('atr')
         
         buy_count = len(indicators_fired['buy'])
         sell_count = len(indicators_fired['sell'])
