@@ -128,6 +128,21 @@ def main():
                             logger.info(f"BUY signal for {symbol} @ {current_price:.8f}")
                             logger.info(f"  Parabolic SAR Long: {psar_value}")
                             
+                            s3_check = indicators_calc.check_s3_support_test(klines, current_price)
+                            
+                            if not s3_check['valid_entry']:
+                                s3_level_str = f"{s3_check['s3_level']:.8f}" if s3_check['s3_level'] else "N/A"
+                                if not s3_check['tested']:
+                                    logger.info(f"✗ SKIP {symbol}: Price has not tested S3 support yet")
+                                elif s3_check['broken']:
+                                    logger.info(f"✗ SKIP {symbol}: S3 support broken (low below S3)")
+                                logger.info(f"  S3 Level: {s3_level_str}")
+                                continue
+                            
+                            logger.info(f"✓ S3 Support validated: tested but not broken")
+                            logger.info(f"  S3 Level: {s3_check['s3_level']:.8f}")
+                            logger.info(f"  Pivot: {s3_check['pivot_data']['pivot']:.8f}")
+                            
                             order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd)
                             
                             if order_result:
