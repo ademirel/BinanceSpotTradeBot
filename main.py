@@ -129,6 +129,8 @@ def main():
                             logger.info(f"  Heiken Ashi: {ha_trend}, Ichimoku: {ichimoku_pos}, Stoch RSI: {indicators.get('stoch_rsi_k', 0):.2f}")
                             
                             fibonacci_enabled = config.get('fibonacci_pivot.enabled', True)
+                            pivot_price = None
+                            
                             if fibonacci_enabled:
                                 klines_1h = binance.get_klines(symbol, interval='1h', limit=10)
                                 if klines_1h:
@@ -148,12 +150,14 @@ def main():
                                         logger.info(f"✗ SKIP {symbol}: Fibonacci pivot support not tested/holding - avoiding weak entry")
                                         continue
                                     
+                                    pivot_price = fib_result['pivot']
                                     logger.info(f"✓ Fibonacci pivot check PASSED - Support holding at {fib_result['tested_level']}")
+                                    logger.info(f"✓ Placing limit BUY order at Pivot level: {pivot_price:.8f}")
                                 else:
                                     logger.warning(f"Could not get 1h klines for {symbol} - skipping fibonacci pivot check")
                                     continue
                             
-                            order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd)
+                            order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd, custom_price=pivot_price)
                             
                             if order_result:
                                 executed_qty = order_result.get('quantity', 0)

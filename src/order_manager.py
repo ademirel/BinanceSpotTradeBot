@@ -110,7 +110,7 @@ class OrderManager:
         
         return quantity
     
-    def place_limit_buy(self, symbol, amount_usd):
+    def place_limit_buy(self, symbol, amount_usd, custom_price=None):
         try:
             current_price = self.client.get_symbol_price(symbol)
             if not current_price:
@@ -120,7 +120,11 @@ class OrderManager:
             if not tick_size:
                 return None
             
-            limit_price = current_price * 0.998
+            if custom_price:
+                limit_price = custom_price
+            else:
+                limit_price = current_price * 0.998
+            
             limit_price = self.round_price(limit_price, tick_size)
             
             quantity = self.calculate_quantity(symbol, limit_price, amount_usd)
