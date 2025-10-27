@@ -7,10 +7,7 @@ class TechnicalIndicators:
         self.config = config
         self.logger = logger
         
-        self.rsi_period = config.get('indicators.rsi.period', 14)
-        self.macd_fast = config.get('indicators.macd.fast_period', 12)
-        self.macd_slow = config.get('indicators.macd.slow_period', 26)
-        self.macd_signal = config.get('indicators.macd.signal_period', 9)
+        self.stoch_rsi_period = config.get('indicators.stoch_rsi.period', 14)
         self.ma_short = config.get('indicators.moving_averages.short_period', 20)
         self.ma_long = config.get('indicators.moving_averages.long_period', 50)
         self.ema_fast = config.get('indicators.ema.fast_period', 12)
@@ -19,6 +16,9 @@ class TechnicalIndicators:
         self.bb_std = config.get('indicators.bollinger.std_dev', 2)
         self.atr_period = config.get('indicators.atr.period', 14)
         self.adx_period = config.get('indicators.adx.period', 14)
+        self.ichimoku_tenkan = config.get('indicators.ichimoku.tenkan_period', 9)
+        self.ichimoku_kijun = config.get('indicators.ichimoku.kijun_period', 26)
+        self.ichimoku_senkou = config.get('indicators.ichimoku.senkou_period', 52)
     
     def calculate_indicators(self, klines):
         if not klines or len(klines) < self.ma_long:
@@ -36,13 +36,35 @@ class TechnicalIndicators:
         df['open'] = df['open'].astype(float)
         df['volume'] = df['volume'].astype(float)
         
-        df['rsi'] = ta.rsi(df['close'], length=self.rsi_period)
+        df['ha_close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+        df['ha_open'] = 0.0
+        df.loc[0, 'ha_open'] = (df.loc[0, 'open'] + df.loc[0, 'close']) / 2
+        for i in range(1, len(df)):
+            df.loc[i, 'ha_open'] = (df.loc[i-1, 'ha_open'] + df.loc[i-1, 'ha_close']) / 2
+        df['ha_high'] = df[['high', 'ha_open', 'ha_close']].max(axis=1)
+        df['ha_low'] = df[['low', 'ha_open', 'ha_close']].min(axis=1)
         
-        macd = ta.macd(df['close'], fast=self.macd_fast, slow=self.macd_slow, signal=self.macd_signal)
-        if macd is not None:
-            df['macd'] = macd[f'MACD_{self.macd_fast}_{self.macd_slow}_{self.macd_signal}']
-            df['macd_signal'] = macd[f'MACDs_{self.macd_fast}_{self.macd_slow}_{self.macd_signal}']
-            df['macd_hist'] = macd[f'MACDh_{self.macd_fast}_{self.macd_slow}_{self.macd_signal}']
+        period_high_9 = df['high'].rolling(window=self.ichimoku_tenkan).max()
+        period_low_9 = df['low'].rolling(window=self.ichimoku_tenkan).min()
+        df['ichimoku_tenkan'] = (period_high_9 + period_low_9) / 2
+        
+        period_high_26 = df['high'].rolling(window=self.ichimoku_kijun).max()
+        period_low_26 = df['low'].rolling(window=self.ichimoku_kijun).min()
+        df['ichimoku_kijun'] = (period_high_26 + period_low_26) / 2
+        
+        df['ichimoku_senkou_a_calc'] = (df['ichimoku_tenkan'] + df['ichimoku_kijun']) / 2
+        df['ichimoku_senkou_a'] = df['ichimoku_senkou_a_calc'].shift(-self.ichimoku_kijun)
+        
+        period_high_52 = df['high'].rolling(window=self.ichimoku_senkou).max()
+        period_low_52 = df['low'].rolling(window=self.ichimoku_senkou).min()
+        df['ichimoku_senkou_b_calc'] = (period_high_52 + period_low_52) / 2
+        df['ichimoku_senkou_b'] = df['ichimoku_senkou_b_calc'].shift(-self.ichimoku_kijun)
+        
+        if len(df) > self.ichimoku_kijun:
+            current_senkou_a = df['ichimoku_senkou_a_calc'].iloc[-self.ichimoku_kijun]
+            current_senkou_b = df['ichimoku_senkou_b_calc'].iloc[-self.ichimoku_kijun]
+            df.loc[df.index[-1], 'ichimoku_senkou_a'] = current_senkou_a
+            df.loc[df.index[-1], 'ichimoku_senkou_b'] = current_senkou_b
         
         df['sma_short'] = ta.sma(df['close'], length=self.ma_short)
         df['sma_long'] = ta.sma(df['close'], length=self.ma_long)
@@ -86,7 +108,7 @@ class TechnicalIndicators:
         if len(df) > 0:
             df['volume_ratio'] = df['volume'] / df['volume_sma']
         
-        stoch_rsi = ta.stochrsi(df['close'], length=self.rsi_period)
+        stoch_rsi = ta.stochrsi(df['close'], length=self.stoch_rsi_period)
         if stoch_rsi is not None and not stoch_rsi.empty:
             try:
                 df['stoch_rsi_k'] = stoch_rsi.iloc[:, 0]

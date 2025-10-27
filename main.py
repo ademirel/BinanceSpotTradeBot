@@ -123,7 +123,9 @@ def main():
                         
                         if signal == 'BUY':
                             logger.info(f"BUY signal for {symbol} @ {current_price:.8f}")
-                            logger.info(f"  RSI: {indicators.get('rsi', 0):.2f}, MACD: {indicators.get('macd', 0):.6f}")
+                            ha_trend = "Bullish" if indicators.get('ha_close', 0) > indicators.get('ha_open', 0) else "Bearish"
+                            ichimoku_pos = "Above Cloud" if current_price > max(indicators.get('ichimoku_senkou_a', 0), indicators.get('ichimoku_senkou_b', 0)) else "Below Cloud"
+                            logger.info(f"  Heiken Ashi: {ha_trend}, Ichimoku: {ichimoku_pos}, Stoch RSI: {indicators.get('stoch_rsi_k', 0):.2f}")
                             
                             order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd)
                             
@@ -149,7 +151,8 @@ def main():
                             else:
                                 logger.warning(f"Failed to place order for {symbol} - check minimum order size requirements")
                         else:
-                            logger.debug(f"Skip {symbol}: No BUY signal (RSI: {indicators.get('rsi', 0):.2f}, MACD: {indicators.get('macd', 0):.6f}, Signal: {signal})")
+                            ha_trend = "Bullish" if indicators.get('ha_close', 0) > indicators.get('ha_open', 0) else "Bearish"
+                            logger.debug(f"Skip {symbol}: No BUY signal (HA: {ha_trend}, Stoch RSI: {indicators.get('stoch_rsi_k', 0):.2f}, Signal: {signal})")
                 
                 except Exception as e:
                     logger.error(f"Error processing {symbol}: {e}")

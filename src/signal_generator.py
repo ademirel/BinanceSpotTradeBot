@@ -5,21 +5,13 @@ class SignalGenerator:
         self.config = config
         self.logger = logger
         
-        self.rsi_buy = config.get('signal_thresholds.rsi_buy_threshold', 35)
-        self.rsi_sell = config.get('signal_thresholds.rsi_sell_threshold', 65)
-        self.macd_strength = config.get('signal_thresholds.macd_signal_strength', 0.0001)
         self.volume_spike_threshold = config.get('signal_thresholds.volume_spike', 1.5)
         self.adx_strong_trend = config.get('signal_thresholds.adx_strong_trend', 25)
         self.bb_squeeze_threshold = config.get('signal_thresholds.bb_squeeze', 0.02)
     
     def generate_signal(self, indicators):
-        if not indicators or 'rsi' not in indicators:
+        if not indicators or 'close' not in indicators:
             return 'HOLD'
-        
-        rsi = indicators.get('rsi', 50)
-        macd = indicators.get('macd', 0)
-        macd_signal = indicators.get('macd_signal', 0)
-        macd_hist = indicators.get('macd_hist', 0)
         
         ema_fast = indicators.get('ema_fast', 0)
         ema_slow = indicators.get('ema_slow', 0)
@@ -38,31 +30,50 @@ class SignalGenerator:
         stoch_rsi_k = indicators.get('stoch_rsi_k', 50)
         stoch_rsi_d = indicators.get('stoch_rsi_d', 50)
         
+        ha_open = indicators.get('ha_open', 0)
+        ha_close = indicators.get('ha_close', 0)
+        ha_high = indicators.get('ha_high', 0)
+        ha_low = indicators.get('ha_low', 0)
+        
+        ichimoku_tenkan = indicators.get('ichimoku_tenkan', 0)
+        ichimoku_kijun = indicators.get('ichimoku_kijun', 0)
+        ichimoku_senkou_a = indicators.get('ichimoku_senkou_a', 0)
+        ichimoku_senkou_b = indicators.get('ichimoku_senkou_b', 0)
+        
         obv = indicators.get('obv', 0)
         atr = indicators.get('atr', 0)
         
-        if pd.isna(rsi) or pd.isna(current_price):
+        if pd.isna(current_price):
             return 'HOLD'
         
         indicators_fired = {'buy': [], 'sell': []}
         
-        if not pd.isna(rsi):
-            if rsi < self.rsi_buy:
-                indicators_fired['buy'].append('rsi')
-            elif rsi > self.rsi_sell:
-                indicators_fired['sell'].append('rsi')
+        if not pd.isna(ha_open) and not pd.isna(ha_close):
+            if ha_close > ha_open:
+                body_size = ha_close - ha_open
+                candle_range = ha_high - ha_low
+                if candle_range > 0 and body_size / candle_range > 0.6:
+                    indicators_fired['buy'].append('heiken_ashi')
+            elif ha_close < ha_open:
+                body_size = ha_open - ha_close
+                candle_range = ha_high - ha_low
+                if candle_range > 0 and body_size / candle_range > 0.6:
+                    indicators_fired['sell'].append('heiken_ashi')
+        
+        if not pd.isna(ichimoku_tenkan) and not pd.isna(ichimoku_kijun) and not pd.isna(ichimoku_senkou_a) and not pd.isna(ichimoku_senkou_b):
+            cloud_top = max(ichimoku_senkou_a, ichimoku_senkou_b)
+            cloud_bottom = min(ichimoku_senkou_a, ichimoku_senkou_b)
+            
+            if current_price > cloud_top and ichimoku_tenkan > ichimoku_kijun:
+                indicators_fired['buy'].append('ichimoku')
+            elif current_price < cloud_bottom and ichimoku_tenkan < ichimoku_kijun:
+                indicators_fired['sell'].append('ichimoku')
         
         if not pd.isna(stoch_rsi_k) and not pd.isna(stoch_rsi_d):
             if stoch_rsi_k < 20 and stoch_rsi_k > stoch_rsi_d:
                 indicators_fired['buy'].append('stoch_rsi')
             elif stoch_rsi_k > 80 and stoch_rsi_k < stoch_rsi_d:
                 indicators_fired['sell'].append('stoch_rsi')
-        
-        if not pd.isna(macd) and not pd.isna(macd_signal) and not pd.isna(macd_hist):
-            if macd > macd_signal and macd_hist > self.macd_strength:
-                indicators_fired['buy'].append('macd')
-            elif macd < macd_signal and macd_hist < -self.macd_strength:
-                indicators_fired['sell'].append('macd')
         
         if not pd.isna(ema_fast) and not pd.isna(ema_slow):
             if ema_fast > ema_slow and current_price > ema_fast:
