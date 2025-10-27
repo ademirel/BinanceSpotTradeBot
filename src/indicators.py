@@ -6,14 +6,19 @@ class TechnicalIndicators:
         self.config = config
         self.logger = logger
         
-        self.psar_acceleration = config.get('parabolic_sar.acceleration', 0.02)
-        self.psar_maximum = config.get('parabolic_sar.maximum', 0.2)
+        self.ma_fast = config.get('moving_averages.fast', 9)
+        self.ma_medium = config.get('moving_averages.medium', 21)
+        self.ma_slow = config.get('moving_averages.slow', 49)
         
-        self.pivot_lookback = config.get('classic_pivot.lookback_candles', 5)
-        self.pivot_tolerance = config.get('classic_pivot.tolerance_percent', 0.5)
+        self.pivot_lookback = config.get('daily_pivot.lookback_candles', 20)
+        self.pivot_tolerance = config.get('daily_pivot.tolerance_percent', 0.5)
     
     def calculate_indicators(self, klines):
-        if not klines or len(klines) < 10:
+        """
+        Calculate Moving Averages (9, 21, 49) on 15m timeframe
+        Check if crossovers happened in last 3 candles (45 minutes)
+        """
+        if not klines or len(klines) < self.ma_slow + 5:
             return None
         
         df = pd.DataFrame(klines, columns=[
@@ -27,37 +32,48 @@ class TechnicalIndicators:
         df['low'] = df['low'].astype(float)
         df['open'] = df['open'].astype(float)
         
-        psar_data = ta.psar(
-            df['high'], 
-            df['low'], 
-            df['close'],
-            af0=self.psar_acceleration,
-            af=self.psar_acceleration,
-            max_af=self.psar_maximum
-        )
+        df['ma_fast'] = ta.sma(df['close'], length=self.ma_fast)
+        df['ma_medium'] = ta.sma(df['close'], length=self.ma_medium)
+        df['ma_slow'] = ta.sma(df['close'], length=self.ma_slow)
         
-        if psar_data is not None and not psar_data.empty:
-            df['psar_long'] = psar_data['PSARl_' + str(self.psar_acceleration) + '_' + str(self.psar_maximum)]
-            df['psar_short'] = psar_data['PSARs_' + str(self.psar_acceleration) + '_' + str(self.psar_maximum)]
-            df['psar_af'] = psar_data['PSARaf_' + str(self.psar_acceleration) + '_' + str(self.psar_maximum)]
-            df['psar_reverse'] = psar_data['PSARr_' + str(self.psar_acceleration) + '_' + str(self.psar_maximum)]
-        else:
-            df['psar_long'] = None
-            df['psar_short'] = None
-            df['psar_af'] = None
-            df['psar_reverse'] = None
+        latest = df.iloc[-1]
         
-        return df.iloc[-1].to_dict()
+        result = latest.to_dict()
+        
+        result['ma_fast_crossed_slow'] = False
+        result['ma_medium_crossed_slow'] = False
+        
+        crossover_window = 3
+        
+        for i in range(1, min(crossover_window + 1, len(df))):
+            current = df.iloc[-i]
+            previous = df.iloc[-(i+1)] if i+1 <= len(df) else None
+            
+            if previous is not None:
+                if not pd.isna(current['ma_fast']) and not pd.isna(current['ma_slow']):
+                    if not pd.isna(previous['ma_fast']) and not pd.isna(previous['ma_slow']):
+                        if previous['ma_fast'] <= previous['ma_slow'] and current['ma_fast'] > current['ma_slow']:
+                            result['ma_fast_crossed_slow'] = True
+                
+                if not pd.isna(current['ma_medium']) and not pd.isna(current['ma_slow']):
+                    if not pd.isna(previous['ma_medium']) and not pd.isna(previous['ma_slow']):
+                        if previous['ma_medium'] <= previous['ma_slow'] and current['ma_medium'] > current['ma_slow']:
+                            result['ma_medium_crossed_slow'] = True
+        
+        result['ma_fast_above_slow'] = not pd.isna(latest['ma_fast']) and not pd.isna(latest['ma_slow']) and latest['ma_fast'] > latest['ma_slow']
+        result['ma_medium_above_slow'] = not pd.isna(latest['ma_medium']) and not pd.isna(latest['ma_slow']) and latest['ma_medium'] > latest['ma_slow']
+        
+        return result
     
-    def calculate_classic_pivot(self, klines):
+    def calculate_daily_pivot(self, daily_klines):
         """
-        Calculate classic pivot points (P, S1, S2, S3, R1, R2, R3)
-        Using the previous period's High, Low, Close
+        Calculate daily pivot points (P, S1, S2, S3, R1, R2, R3)
+        Using the previous day's High, Low, Close
         """
-        if not klines or len(klines) < 2:
+        if not daily_klines or len(daily_klines) < 2:
             return None
         
-        df = pd.DataFrame(klines, columns=[
+        df = pd.DataFrame(daily_klines, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_volume', 'trades', 'taker_buy_base',
             'taker_buy_quote', 'ignore'
@@ -91,29 +107,29 @@ class TechnicalIndicators:
             'r3': r3
         }
     
-    def check_s3_support_test(self, klines, current_price):
+    def check_daily_pivot_test(self, klines_15m, daily_klines, current_price):
         """
-        Check if price has tested S3 support without breaking it
+        Check if price has tested daily pivot without breaking it
         Returns: {
-            'tested': bool,  # Has price approached S3?
-            'broken': bool,  # Has price broken below S3?
-            's3_level': float,
+            'tested': bool,  # Has price approached pivot?
+            'broken': bool,  # Has price broken below pivot?
+            'pivot_level': float,
             'valid_entry': bool  # tested but not broken
         }
         """
-        pivot_data = self.calculate_classic_pivot(klines)
+        pivot_data = self.calculate_daily_pivot(daily_klines)
         
         if not pivot_data:
             return {
                 'tested': False,
                 'broken': False,
-                's3_level': None,
+                'pivot_level': None,
                 'valid_entry': False
             }
         
-        s3 = pivot_data['s3']
+        pivot = pivot_data['pivot']
         
-        df = pd.DataFrame(klines, columns=[
+        df = pd.DataFrame(klines_15m, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_volume', 'trades', 'taker_buy_base',
             'taker_buy_quote', 'ignore'
@@ -124,19 +140,21 @@ class TechnicalIndicators:
         
         recent_candles = df.iloc[-self.pivot_lookback:]
         
-        tolerance = s3 * (self.pivot_tolerance / 100)
-        s3_upper_band = s3 + tolerance
+        tolerance = pivot * (self.pivot_tolerance / 100)
+        pivot_lower_band = pivot - tolerance
+        pivot_upper_band = pivot + tolerance
         
         tested = False
         broken = False
         
         for _, candle in recent_candles.iterrows():
             candle_low = candle['low']
+            candle_close = candle['close']
             
-            if candle_low <= s3_upper_band:
+            if pivot_lower_band <= candle_low <= pivot_upper_band:
                 tested = True
             
-            if candle_low < s3:
+            if candle_close < pivot_lower_band:
                 broken = True
                 break
         
@@ -145,7 +163,7 @@ class TechnicalIndicators:
         return {
             'tested': tested,
             'broken': broken,
-            's3_level': s3,
+            'pivot_level': pivot,
             'valid_entry': valid_entry,
             'pivot_data': pivot_data
         }

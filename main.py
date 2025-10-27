@@ -110,12 +110,17 @@ def main():
                             continue
                         
                         timeframe = str(config.get('timeframe', '15m'))
-                        klines = binance.get_klines(symbol, interval=timeframe, limit=100)
-                        if not klines:
-                            logger.warning(f"Skip {symbol}: Could not get klines data")
+                        klines_15m = binance.get_klines(symbol, interval=timeframe, limit=100)
+                        if not klines_15m:
+                            logger.warning(f"Skip {symbol}: Could not get 15m klines data")
                             continue
                         
-                        indicators = indicators_calc.calculate_indicators(klines)
+                        klines_1d = binance.get_klines(symbol, interval='1d', limit=10)
+                        if not klines_1d:
+                            logger.warning(f"Skip {symbol}: Could not get daily klines data")
+                            continue
+                        
+                        indicators = indicators_calc.calculate_indicators(klines_15m)
                         if not indicators:
                             logger.warning(f"Skip {symbol}: Could not calculate indicators")
                             continue
@@ -123,25 +128,36 @@ def main():
                         signal = signal_gen.generate_signal(indicators)
                         
                         if signal == 'BUY':
-                            psar_long = indicators.get('psar_long')
-                            psar_value = f"{psar_long:.8f}" if psar_long is not None else "N/A"
+                            ma_fast = indicators.get('ma_fast')
+                            ma_medium = indicators.get('ma_medium')
+                            ma_slow = indicators.get('ma_slow')
+                            ma_fast_crossed = indicators.get('ma_fast_crossed_slow', False)
+                            ma_medium_crossed = indicators.get('ma_medium_crossed_slow', False)
+                            
+                            ma_fast_str = f"{ma_fast:.8f}" if ma_fast is not None else "N/A"
+                            ma_medium_str = f"{ma_medium:.8f}" if ma_medium is not None else "N/A"
+                            ma_slow_str = f"{ma_slow:.8f}" if ma_slow is not None else "N/A"
+                            
                             logger.info(f"BUY signal for {symbol} @ {current_price:.8f}")
-                            logger.info(f"  Parabolic SAR Long: {psar_value}")
+                            logger.info(f"  MA 9: {ma_fast_str}")
+                            logger.info(f"  MA 21: {ma_medium_str}")
+                            logger.info(f"  MA 49: {ma_slow_str}")
+                            logger.info(f"  MA9 crossed MA49: {ma_fast_crossed}")
+                            logger.info(f"  MA21 crossed MA49: {ma_medium_crossed}")
                             
-                            s3_check = indicators_calc.check_s3_support_test(klines, current_price)
+                            pivot_check = indicators_calc.check_daily_pivot_test(klines_15m, klines_1d, current_price)
                             
-                            if not s3_check['valid_entry']:
-                                s3_level_str = f"{s3_check['s3_level']:.8f}" if s3_check['s3_level'] else "N/A"
-                                if not s3_check['tested']:
-                                    logger.info(f"✗ SKIP {symbol}: Price has not tested S3 support yet")
-                                elif s3_check['broken']:
-                                    logger.info(f"✗ SKIP {symbol}: S3 support broken (low below S3)")
-                                logger.info(f"  S3 Level: {s3_level_str}")
+                            if not pivot_check['valid_entry']:
+                                pivot_level_str = f"{pivot_check['pivot_level']:.8f}" if pivot_check['pivot_level'] else "N/A"
+                                if not pivot_check['tested']:
+                                    logger.info(f"✗ SKIP {symbol}: Price has not tested daily pivot yet")
+                                elif pivot_check['broken']:
+                                    logger.info(f"✗ SKIP {symbol}: Daily pivot broken (price below pivot)")
+                                logger.info(f"  Daily Pivot Level: {pivot_level_str}")
                                 continue
                             
-                            logger.info(f"✓ S3 Support validated: tested but not broken")
-                            logger.info(f"  S3 Level: {s3_check['s3_level']:.8f}")
-                            logger.info(f"  Pivot: {s3_check['pivot_data']['pivot']:.8f}")
+                            logger.info(f"✓ Daily Pivot validated: tested but not broken")
+                            logger.info(f"  Daily Pivot Level: {pivot_check['pivot_level']:.8f}")
                             
                             order_result = order_mgr.place_limit_buy(symbol, config.position_size_usd)
                             

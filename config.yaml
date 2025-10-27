@@ -13,15 +13,16 @@ trailing_stop_percent: 1.5
 # Timeframe for technical analysis
 timeframe: 15m
 
-# Parabolic SAR Indicator
-parabolic_sar:
-  acceleration: 0.02
-  maximum: 0.2
+# Moving Average Indicator (for 15m timeframe)
+moving_averages:
+  fast: 9        # MA 9
+  medium: 21     # MA 21
+  slow: 49       # MA 49
 
-# Classic Pivot S3 Support Filter
-classic_pivot:
-  lookback_candles: 5      # Number of recent candles to check for S3 test
-  tolerance_percent: 0.5   # % tolerance for "approaching" S3 (0.5% = S3 ± 0.5%)
+# Daily Pivot Point Filter
+daily_pivot:
+  lookback_candles: 20     # Number of recent 15m candles to check for pivot test (~5 hours)
+  tolerance_percent: 0.5   # % tolerance for "approaching" pivot (0.5% = P ± 0.5%)
 
 # Trading Settings
 check_interval_seconds: 60
