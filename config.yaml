@@ -13,52 +13,14 @@ trailing_stop_percent: 1.5
 # Timeframe for technical analysis
 timeframe: 15m
 
-# Technical Indicators
-indicators:
-  stoch_rsi:
-    period: 14
-  
-  heiken_ashi:
-    enabled: true
-  
-  ichimoku:
-    tenkan_period: 9
-    kijun_period: 26
-    senkou_period: 52
-  
-  moving_averages:
-    short_period: 20
-    long_period: 50
-  
-  ema:
-    fast_period: 12
-    slow_period: 26
-  
-  bollinger:
-    period: 20
-    std_dev: 2
-  
-  atr:
-    period: 14
-  
-  adx:
-    period: 14
+# Parabolic SAR Indicator
+parabolic_sar:
+  acceleration: 0.02
+  maximum: 0.2
 
 # Trading Settings
 check_interval_seconds: 60
 max_open_positions: 20
-
-# Signal Generation
-signal_thresholds:
-  volume_spike: 1.5
-  adx_strong_trend: 25
-  bb_squeeze: 0.02
-
-# Fibonacci Pivot Filter (1h)
-fibonacci_pivot:
-  enabled: true
-  lookback_candles: 5
-  tolerance_percent: 0.5
 
 # Binance API (set in .env file)
 testnet: false
