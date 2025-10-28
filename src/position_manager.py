@@ -132,9 +132,9 @@ class PositionManager:
         """Reset daily P&L"""
         self.daily_pnl = {
             'reset_date': datetime.now(timezone.utc).isoformat(),
-            'realized_pnl': 0.0,
-            'unrealized_pnl': 0.0,
-            'total_pnl': 0.0,
+            'realized_pnl_usd': 0.0,  # Total P&L in USDT
+            'starting_balance_usd': 0.0,  # Starting balance (set on first trade)
+            'total_pnl_percent': 0.0,  # Percentage based on starting balance
             'trades_count': 0,
             'wins': 0,
             'losses': 0
@@ -148,18 +148,26 @@ class PositionManager:
         """Get current daily P&L"""
         return self.daily_pnl.copy()
     
+    def set_starting_balance(self, balance_usd):
+        """Set starting balance for daily P&L percentage calculation"""
+        if self.daily_pnl.get('starting_balance_usd', 0) == 0:
+            self.daily_pnl['starting_balance_usd'] = balance_usd
+            self.save_daily_pnl()
+            if self.logger:
+                self.logger.info(f"Starting balance set: ${balance_usd:.2f}")
+    
     def is_in_protection_mode(self):
         """Check if in profit protection mode (daily profit > threshold)"""
         if self.protection_mode_behavior == 'disabled':
             return False
         
-        total_pnl_percent = self.daily_pnl.get('total_pnl', 0.0)
+        total_pnl_percent = self.daily_pnl.get('total_pnl_percent', 0.0)
         
         return total_pnl_percent >= self.daily_profit_protection_percent
     
     def has_hit_daily_loss_limit(self):
         """Check if daily loss limit has been hit"""
-        total_pnl_percent = self.daily_pnl.get('total_pnl', 0.0)
+        total_pnl_percent = self.daily_pnl.get('total_pnl_percent', 0.0)
         
         return total_pnl_percent <= -self.daily_loss_limit_percent
     
@@ -347,7 +355,7 @@ class PositionManager:
                     profit_usd = (position['entry_price'] - close_price) * position['quantity']
                 
                 # Update daily P&L
-                self.daily_pnl['realized_pnl'] += profit_usd
+                self.daily_pnl['realized_pnl_usd'] += profit_usd
                 self.daily_pnl['trades_count'] += 1
                 
                 if profit_usd > 0:
@@ -355,9 +363,12 @@ class PositionManager:
                 else:
                     self.daily_pnl['losses'] += 1
                 
-                # Recalculate total P&L
-                # Note: This is simplified - in production you'd track account balance
-                self.daily_pnl['total_pnl'] += profit_percent
+                # Calculate total P&L percentage based on starting balance
+                starting_balance = self.daily_pnl.get('starting_balance_usd', 0)
+                if starting_balance > 0:
+                    self.daily_pnl['total_pnl_percent'] = (self.daily_pnl['realized_pnl_usd'] / starting_balance) * 100
+                else:
+                    self.daily_pnl['total_pnl_percent'] = 0.0
                 
                 self.save_daily_pnl()
                 
@@ -365,7 +376,7 @@ class PositionManager:
                     self.logger.info(
                         f"Position closed: {symbol} {side} | Entry: {position['entry_price']:.8f} | "
                         f"Exit: {close_price:.8f} | P/L: {profit_percent:.2f}% (${profit_usd:.2f}) | "
-                        f"Reason: {reason or 'Manual'} | Daily P&L: {self.daily_pnl['total_pnl']:.2f}%"
+                        f"Reason: {reason or 'Manual'} | Daily P&L: {self.daily_pnl.get('total_pnl_percent', 0):.2f}% (${self.daily_pnl.get('realized_pnl_usd', 0):.2f})"
                     )
                 
                 self.log_trade(symbol, position, close_price, profit_percent, profit_usd, reason)

@@ -74,9 +74,12 @@ def main():
     usdt_balance = binance.get_account_balance('USDT')
     logger.info(f"\nUSDT Balance: ${usdt_balance:.2f}")
     
+    # Set starting balance for daily P&L tracking
+    position_mgr.set_starting_balance(usdt_balance)
+    
     # Check daily P&L status
     daily_pnl = position_mgr.get_daily_pnl()
-    logger.info(f"Daily P&L: {daily_pnl.get('total_pnl', 0):.2f}% ({daily_pnl.get('trades_count', 0)} trades)")
+    logger.info(f"Daily P&L: {daily_pnl.get('total_pnl_percent', 0):.2f}% (${daily_pnl.get('realized_pnl_usd', 0):.2f}) - {daily_pnl.get('trades_count', 0)} trades")
     
     iteration = 0
     
@@ -94,13 +97,13 @@ def main():
             
             # Check daily P&L and protection modes
             daily_pnl = position_mgr.get_daily_pnl()
-            logger.info(f"Daily P&L: {daily_pnl.get('total_pnl', 0):.2f}% | Trades: {daily_pnl.get('trades_count', 0)} (W: {daily_pnl.get('wins', 0)}, L: {daily_pnl.get('losses', 0)})")
+            logger.info(f"Daily P&L: {daily_pnl.get('total_pnl_percent', 0):.2f}% (${daily_pnl.get('realized_pnl_usd', 0):.2f}) | Trades: {daily_pnl.get('trades_count', 0)} (W: {daily_pnl.get('wins', 0)}, L: {daily_pnl.get('losses', 0)})")
             
             if position_mgr.is_in_protection_mode():
-                logger.warning(f"⚠️  PROFIT PROTECTION MODE ACTIVE - No new trades (Daily profit: {daily_pnl.get('total_pnl', 0):.2f}%)")
+                logger.warning(f"⚠️  PROFIT PROTECTION MODE ACTIVE - No new trades (Daily profit: {daily_pnl.get('total_pnl_percent', 0):.2f}%)")
             
             if position_mgr.has_hit_daily_loss_limit():
-                logger.error(f"🛑 DAILY LOSS LIMIT HIT - No new trades (Daily loss: {daily_pnl.get('total_pnl', 0):.2f}%)")
+                logger.error(f"🛑 DAILY LOSS LIMIT HIT - No new trades (Daily loss: {daily_pnl.get('total_pnl_percent', 0):.2f}%)")
             
             # Scan pairs for opportunities
             if iteration % 5 == 1:  # Rescan every 5 iterations
@@ -289,7 +292,8 @@ def main():
         daily_pnl = position_mgr.get_daily_pnl()
         
         logger.info(f"\nFinal Status:")
-        logger.info(f"  Daily P&L: {daily_pnl.get('total_pnl', 0):.2f}%")
+        logger.info(f"  Daily P&L: {daily_pnl.get('total_pnl_percent', 0):.2f}% (${daily_pnl.get('realized_pnl_usd', 0):.2f})")
+        logger.info(f"  Starting Balance: ${daily_pnl.get('starting_balance_usd', 0):.2f}")
         logger.info(f"  Total Trades: {daily_pnl.get('trades_count', 0)}")
         logger.info(f"  Wins: {daily_pnl.get('wins', 0)} | Losses: {daily_pnl.get('losses', 0)}")
         
