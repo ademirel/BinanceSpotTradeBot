@@ -54,12 +54,13 @@ class TechnicalIndicators:
         # HA Close = (O + H + L + C) / 4
         ha['ha_close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
         
-        # HA Open
+        # HA Open - initialize
         ha['ha_open'] = 0.0
-        ha['ha_open'].iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
+        ha.loc[ha.index[0], 'ha_open'] = (df.loc[df.index[0], 'open'] + df.loc[df.index[0], 'close']) / 2
         
+        # HA Open - calculate for remaining candles
         for i in range(1, len(ha)):
-            ha['ha_open'].iloc[i] = (ha['ha_open'].iloc[i-1] + ha['ha_close'].iloc[i-1]) / 2
+            ha.loc[ha.index[i], 'ha_open'] = (ha.loc[ha.index[i-1], 'ha_open'] + ha.loc[ha.index[i-1], 'ha_close']) / 2
         
         # HA High = max(H, HA_Open, HA_Close)
         ha['ha_high'] = ha[['high', 'ha_open', 'ha_close']].max(axis=1)
