@@ -110,6 +110,61 @@ class OrderManager:
         
         return quantity
     
+    def place_market_buy(self, symbol, amount_usd):
+        """
+        Place market buy order
+        Returns: {symbol, price, quantity, order_id} or None
+        """
+        try:
+            current_price = self.client.get_symbol_price(symbol)
+            if not current_price:
+                return None
+            
+            quantity = self.calculate_quantity(symbol, current_price, amount_usd)
+            if not quantity:
+                return None
+            
+            if self.logger:
+                self.logger.info(f"Placing MARKET buy for {symbol}: {quantity} (est. ${amount_usd:.2f})")
+            
+            order = self.client.create_market_buy_order(symbol, str(quantity))
+            
+            if not order:
+                return None
+            
+            order_id = order.get('orderId')
+            if not order_id:
+                return None
+            
+            # Market orders fill immediately
+            fills = order.get('fills', [])
+            
+            if fills:
+                total_cost = sum(float(fill['price']) * float(fill['qty']) for fill in fills)
+                total_qty = sum(float(fill['qty']) for fill in fills)
+                avg_price = total_cost / total_qty if total_qty > 0 else current_price
+                executed_qty = total_qty
+            else:
+                # Fallback
+                executed_qty = float(order.get('executedQty', quantity))
+                avg_price = current_price
+            
+            if self.logger:
+                slippage = ((avg_price - current_price) / current_price) * 100
+                self.logger.info(f"MARKET order filled {symbol}: {executed_qty} @ {avg_price:.8f} (slippage: {slippage:.3f}%)")
+            
+            return {
+                'symbol': symbol,
+                'price': avg_price,
+                'quantity': executed_qty,
+                'order_id': order_id
+            }
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error placing market buy for {symbol}: {e}")
+            return None
+    
     def place_limit_buy(self, symbol, amount_usd, custom_price=None):
         try:
             current_price = self.client.get_symbol_price(symbol)
