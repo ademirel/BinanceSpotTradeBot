@@ -1,32 +1,98 @@
-# Binance Trading Bot Configuration
+# Binance Spot Trading Bot - EMA/RSI/Heiken Ashi Strategy
+# All parameters are configurable
 
-# Top coin selection
-top_coins_count: 20
-
-# Position sizing
-position_size_usd: 100.0
-
-# Risk Management
-stop_loss_percent: 2.0
-trailing_stop_percent: 1.5
-
-# Timeframe for technical analysis
+# Timeframe
 timeframe: 15m
 
-# Moving Average Indicator (for 15m timeframe)
-moving_averages:
-  fast: 9        # MA 9
-  medium: 21     # MA 21
-  slow: 49       # MA 49
+# Trading Pairs Scanner
+scanner:
+  pairs:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    - SOLUSDT
+    - XRPUSDT
+    - ADAUSDT
+    - DOGEUSDT
+    - AVAXUSDT
+    - DOTUSDT
+    - MATICUSDT
+    - LINKUSDT
+    - UNIUSDT
+    - ATOMUSDT
+    - LTCUSDT
+    - ETCUSDT
+    - NEARUSDT
+    - ALGOUSDT
+    - FTMUSDT
+    - MANAUSDT
+    - SANDUSDT
+    - AXSUSDT
+    - CHZUSDT
+    - ENJUSDT
+    - GALAUSDT
+    - ICPUSDT
+  scan_interval_seconds: 60
+  max_pairs_to_trade: 5
 
-# Daily Pivot Point Filter
-daily_pivot:
-  lookback_candles: 20     # Number of recent 15m candles to check for pivot test (~5 hours)
-  tolerance_percent: 0.5   # % tolerance for "approaching" pivot (0.5% = P ± 0.5%)
+# Technical Indicators
+indicators:
+  ema:
+    fast: 21
+    slow: 49
+  rsi:
+    period: 14
+    oversold: 10
+    overbought: 90
+  atr:
+    period: 14
+    lookback_for_average: 50
+  heiken_ashi:
+    enabled: true
+    min_body_percent: 0.3
 
-# Trading Settings
-check_interval_seconds: 60
-max_open_positions: 20
+# Volatility Filter
+volatility:
+  atr_multiplier: 1.5
+  enabled: true
 
-# Binance API (set in .env file)
-testnet: false
+# Entry Signal (all conditions must be met)
+entry:
+  order_type: market
+  require_ema_crossover: true
+  require_rsi_extreme: true
+  require_heiken_ashi: true
+
+# Exit Strategy
+exit:
+  trailing_stop:
+    initial_percent: 2.5
+    atr_multiplier: 2.0
+    update_frequency: every_candle
+  use_rsi_reversal: true
+  rsi_reversal_buy_threshold: 30
+  rsi_reversal_sell_threshold: 70
+  use_ema_recross: true
+
+# Risk Management
+risk_management:
+  max_positions: 5
+  position_size_percent: 25
+  daily_loss_limit_percent: 3.0
+  daily_profit_protection_percent: 3.0
+  protection_mode_behavior: stop_new_entries
+
+# Daily P&L Tracking
+daily_tracking:
+  reset_hour_utc: 0
+  track_realized_only: true
+
+# Binance API Settings
+binance:
+  testnet: false
+  rate_limit_delay_ms: 200
+
+# Bot Settings
+bot:
+  check_interval_seconds: 60
+  log_level: INFO
